@@ -4,3 +4,4 @@ langchain-huggingface
 chromadb
 pdfplumber
 python-dotenv
+langchain-groq
