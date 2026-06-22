@@ -6,3 +6,4 @@ pdfplumber
 python-dotenv
 langchain-groq
 langchain-chroma
+protobuf==3.20.3
