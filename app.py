@@ -64,3 +64,12 @@ if uploaded_file is not None:
 
 else:
     st.info("Waiting for file upload...")
+
+
+
+import traceback
+
+try:
+    result = analyzer.process_file(uploaded_file)
+except Exception as e:
+    st.error(traceback.format_exc())  # shows full stack trace in UI
