@@ -149,22 +149,22 @@ def show_main_app():
             else:
                 st.success("✅ No significant risks found in this document.")
 
- # ── Download Report Button ─────────────────────────────
-st.markdown("---")
-st.subheader("📄 Download Report")
+            # ── Download Report Button ─────────────────────────────
+            st.markdown("---")
+            st.subheader("📄 Download Report")
 
-try:
-    pdf_buffer = analyzer.generate_pdf_report(result, risk_data)
-    st.download_button(
-        label="📥 Download PDF Report",
-        data=pdf_buffer,
-        file_name=f"contract_analysis_{uploaded_file.name.replace('.pdf', '')}.pdf",
-        mime="application/pdf",
-        use_container_width=True
-    )
-except Exception as e:
-    st.error(f"Could not generate report: {e}")
-        
+            try:
+                pdf_buffer = analyzer.generate_pdf_report(result, risk_data)
+                st.download_button(
+                    label="📥 Download PDF Report",
+                    data=pdf_buffer,
+                    file_name=f"contract_analysis_{uploaded_file.name.replace('.pdf', '')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Could not generate report: {e}")
+
         except Exception as e:
             st.error(f"Error processing file: {e}")
 
@@ -179,4 +179,3 @@ if st.session_state.logged_in:
     show_main_app()
 else:
     show_auth_screen()
-
