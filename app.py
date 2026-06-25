@@ -3,6 +3,7 @@ from backend import LegalAnalyzer
 from auth import login_user, register_user
 import tempfile
 import os
+import os
 os.environ["SUPABASE_URL"] = st.secrets["SUPABASE_URL"]
 os.environ["SUPABASE_KEY"] = st.secrets["SUPABASE_KEY"]
 os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
