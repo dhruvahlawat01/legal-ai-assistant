@@ -5,6 +5,10 @@ from supabase import create_client
 def get_supabase():
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
+    
+    if not url or not key:
+        raise ValueError(f"Missing Supabase credentials. URL: {'set' if url else 'MISSING'}, KEY: {'set' if key else 'MISSING'}")
+    
     return create_client(url, key)
 
 def hash_password(password):
@@ -13,17 +17,21 @@ def hash_password(password):
 def register_user(username, password):
     try:
         supabase = get_supabase()
+
         # Check if username exists
         existing = supabase.table("users").select("username").eq("username", username).execute()
         if existing.data:
             return False, "Username already exists."
-        
+
         # Insert new user
         supabase.table("users").insert({
             "username": username,
             "password_hash": hash_password(password)
         }).execute()
         return True, "Account created successfully!"
+
+    except ValueError as e:
+        return False, f"Config error: {str(e)}"
     except Exception as e:
         return False, f"Registration failed: {str(e)}"
 
@@ -31,14 +39,17 @@ def login_user(username, password):
     try:
         supabase = get_supabase()
         result = supabase.table("users").select("*").eq("username", username).execute()
-        
+
         if not result.data:
             return False, "Username not found."
-        
+
         user = result.data[0]
         if user["password_hash"] != hash_password(password):
             return False, "Incorrect password."
-        
+
         return True, "Login successful!"
+
+    except ValueError as e:
+        return False, f"Config error: {str(e)}"
     except Exception as e:
         return False, f"Login failed: {str(e)}"
