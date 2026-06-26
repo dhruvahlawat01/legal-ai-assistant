@@ -4,6 +4,10 @@ from auth import login_user, register_user
 import tempfile
 import os
 
+# At the top of your app, after imports
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "home"  # or whatever your default page is
+
 # ── Load Secrets First ─────────────────────────────────
 os.environ["SUPABASE_URL"] = st.secrets["SUPABASE_URL"]
 os.environ["SUPABASE_KEY"] = st.secrets["SUPABASE_KEY"]
