@@ -148,6 +148,66 @@ class LegalAnalyzer:
             "breakdown": breakdown
         }
 
+    def rewrite_clause(self, clause_type, explanation, text_snippet):
+        """Suggest a safer rewrite for a risky clause"""
+        rewrite_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior legal expert specializing in contract drafting.
+            Your task is to rewrite risky contract clauses into fair, balanced alternatives.
+            
+            Guidelines for rewriting:
+            - Make the clause fair for both parties
+            - Use clear, plain English
+            - Remove or limit overly broad restrictions
+            - Add reasonable time limits where missing
+            - Add geographical limits where missing
+            - Ensure GDPR compliance where relevant
+            - Keep it professional and legally sound
+            
+            Return ONLY valid JSON in this exact format, no extra commentary:
+            {{
+                "original_issue": "string - what makes the original clause risky",
+                "rewritten_clause": "string - the full rewritten clause text",
+                "key_changes": ["change 1", "change 2", "change 3"],
+                "risk_reduction": "HIGH/MEDIUM/LOW - how much risk this rewrite reduces"
+            }}
+            """),
+            ("human", """Please rewrite this risky contract clause:
+            
+            Clause Type: {clause_type}
+            Risk Explanation: {explanation}
+            Original Text: {text_snippet}
+            
+            Provide a safer, fairer alternative.""")
+        ])
+
+        rewrite_chain = rewrite_prompt | self.llm
+
+        try:
+            response = rewrite_chain.invoke({
+                "clause_type": clause_type,
+                "explanation": explanation,
+                "text_snippet": text_snippet if text_snippet else "No specific text provided"
+            })
+
+            try:
+                result = json.loads(response.content)
+                return result
+            except json.JSONDecodeError:
+                try:
+                    start = response.content.index("{")
+                    end = response.content.rindex("}") + 1
+                    result = json.loads(response.content[start:end])
+                    return result
+                except (ValueError, json.JSONDecodeError):
+                    return {
+                        "original_issue": explanation,
+                        "rewritten_clause": response.content,
+                        "key_changes": ["See rewritten clause above"],
+                        "risk_reduction": "MEDIUM"
+                    }
+        except Exception as e:
+            raise RuntimeError(f"Clause rewriting failed: {str(e)}")
+
     def generate_pdf_report(self, results, risk_data, filename="contract_analysis"):
         """Generate a PDF report of the analysis"""
         from reportlab.lib.pagesizes import letter
@@ -155,7 +215,7 @@ class LegalAnalyzer:
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.enums import TA_CENTER
 
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -169,7 +229,6 @@ class LegalAnalyzer:
 
         styles = getSampleStyleSheet()
 
-        # Custom Styles
         title_style = ParagraphStyle(
             "TitleStyle",
             parent=styles["Title"],
@@ -217,7 +276,7 @@ class LegalAnalyzer:
 
         story = []
 
-        # ── Header ────────────────────────────────────────────
+        # Header
         story.append(Paragraph("ContractSentry AI", title_style))
         story.append(Paragraph("Legal Contract Risk Analysis Report", subtitle_style))
         story.append(Paragraph(
@@ -228,7 +287,7 @@ class LegalAnalyzer:
         story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1a1a2e")))
         story.append(Spacer(1, 0.2 * inch))
 
-        # ── Risk Score Summary ─────────────────────────────────
+        # Risk Score Summary
         story.append(Paragraph("Overall Risk Assessment", section_header_style))
 
         risk_color_map = {
@@ -269,7 +328,6 @@ class LegalAnalyzer:
         story.append(summary_table)
         story.append(Spacer(1, 0.1 * inch))
 
-        # Risk label
         risk_label_style = ParagraphStyle(
             "RiskLabel",
             parent=styles["Normal"],
@@ -283,7 +341,7 @@ class LegalAnalyzer:
         story.append(Paragraph(risk_data["label"], risk_label_style))
         story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#dee2e6")))
 
-        # ── Detailed Findings ──────────────────────────────────
+        # Detailed Findings
         story.append(Paragraph("Detailed Risk Findings", section_header_style))
 
         risk_colors_map = {
@@ -323,7 +381,6 @@ class LegalAnalyzer:
             ]))
             story.append(clause_table)
             story.append(Spacer(1, 0.05 * inch))
-
             story.append(Paragraph(f"<b>Explanation:</b> {explanation}", body_style))
 
             if text_snippet:
@@ -332,7 +389,7 @@ class LegalAnalyzer:
 
             story.append(Spacer(1, 0.15 * inch))
 
-        # ── Footer ─────────────────────────────────────────────
+        # Footer
         story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#dee2e6")))
         story.append(Spacer(1, 0.1 * inch))
         footer_style = ParagraphStyle(
@@ -358,66 +415,6 @@ class LegalAnalyzer:
         doc.build(story)
         buffer.seek(0)
         return buffer
-
-    def rewrite_clause(self, clause_type, explanation, text_snippet):
-    """Suggest a safer rewrite for a risky clause"""
-    rewrite_prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a senior legal expert specializing in contract drafting.
-        Your task is to rewrite risky contract clauses into fair, balanced alternatives.
-        
-        Guidelines for rewriting:
-        - Make the clause fair for both parties
-        - Use clear, plain English
-        - Remove or limit overly broad restrictions
-        - Add reasonable time limits where missing
-        - Add geographical limits where missing
-        - Ensure GDPR compliance where relevant
-        - Keep it professional and legally sound
-        
-        Return ONLY valid JSON in this exact format, no extra commentary:
-        {{
-            "original_issue": "string - what makes the original clause risky",
-            "rewritten_clause": "string - the full rewritten clause text",
-            "key_changes": ["change 1", "change 2", "change 3"],
-            "risk_reduction": "HIGH/MEDIUM/LOW - how much risk this rewrite reduces"
-        }}
-        """),
-        ("human", """Please rewrite this risky contract clause:
-        
-        Clause Type: {clause_type}
-        Risk Explanation: {explanation}
-        Original Text: {text_snippet}
-        
-        Provide a safer, fairer alternative.""")
-    ])
-    
-    rewrite_chain = rewrite_prompt | self.llm
-    
-    try:
-        response = rewrite_chain.invoke({
-            "clause_type": clause_type,
-            "explanation": explanation,
-            "text_snippet": text_snippet if text_snippet else "No specific text provided"
-        })
-        
-        try:
-            result = json.loads(response.content)
-            return result
-        except json.JSONDecodeError:
-            try:
-                start = response.content.index("{")
-                end = response.content.rindex("}") + 1
-                result = json.loads(response.content[start:end])
-                return result
-            except (ValueError, json.JSONDecodeError):
-                return {
-                    "original_issue": explanation,
-                    "rewritten_clause": response.content,
-                    "key_changes": ["See rewritten clause above"],
-                    "risk_reduction": "MEDIUM"
-                }
-    except Exception as e:
-        raise RuntimeError(f"Clause rewriting failed: {str(e)}")
 
     def process_file(self, uploaded_file):
         """Accepts a Streamlit UploadedFile, saves to temp file, runs analysis"""
