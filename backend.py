@@ -14,7 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate
 load_dotenv()
 
 class LegalAnalyzer:
-    def __init__(self, model_name="gemini-2.0-flash"):
+    def __init__(self, model_name="gemini-2.0-flash-lite"):
         # 1. Setup Embeddings
         self.embedder = HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5")
 
