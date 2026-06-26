@@ -101,7 +101,7 @@ def show_main_app():
             result = analyzer.analyze_risk(temp_path)
             progress_bar.progress(1.0)
 
-            # Risk Score
+            # ── Risk Score ─────────────────────────────────────
             risk_data = analyzer.calculate_risk_score(result)
 
             st.markdown("---")
@@ -129,11 +129,12 @@ def show_main_app():
 
             st.progress(risk_data["score"] / 100)
 
+            # ── Detected Risks ─────────────────────────────────
             st.markdown("---")
             st.subheader("🚩 Detected Risks:")
 
             if result:
-                for item in result:
+                for i, item in enumerate(result):
                     risk_level = item.get("risk_level", "UNKNOWN")
                     clause_type = item.get("clause_type", "General")
                     explanation = item.get("explanation", "")
@@ -141,9 +142,10 @@ def show_main_app():
 
                     color = "red" if risk_level == "HIGH" else ("orange" if risk_level == "MEDIUM" else "green")
 
+                    # Risk Card
                     st.markdown(f"""
                     <div style="border-left: 4px solid {color}; padding: 10px; 
-                                margin-bottom: 10px; background-color: {color}11;
+                                margin-bottom: 5px; background-color: {color}11;
                                 border-radius: 0 8px 8px 0;">
                         <b style="color: {color};">{clause_type}</b> &nbsp; 
                         <code style="background:{color}22;">{risk_level}</code><br><br>
@@ -151,10 +153,78 @@ def show_main_app():
                         {"<small><b>Snippet:</b> " + text_snippet + "</small>" if text_snippet else ""}
                     </div>
                     """, unsafe_allow_html=True)
+
+                    # ── Rewrite Button ─────────────────────────
+                    if risk_level in ["HIGH", "MEDIUM"]:
+                        rewrite_key = f"rewrite_{i}"
+                        rewrite_result_key = f"rewrite_result_{i}"
+
+                        if rewrite_result_key not in st.session_state:
+                            st.session_state[rewrite_result_key] = None
+
+                        col_btn1, col_btn2 = st.columns([1, 5])
+                        with col_btn1:
+                            if st.button(
+                                "✍️ Rewrite Clause",
+                                key=rewrite_key,
+                                help="Get a safer, fairer version of this clause"
+                            ):
+                                with st.spinner("✍️ Generating safer clause..."):
+                                    try:
+                                        rewrite = analyzer.rewrite_clause(
+                                            clause_type, explanation, text_snippet
+                                        )
+                                        st.session_state[rewrite_result_key] = rewrite
+                                    except Exception as e:
+                                        st.error(f"Rewrite failed: {e}")
+
+                        with col_btn2:
+                            if st.session_state[rewrite_result_key]:
+                                if st.button("❌ Hide", key=f"hide_{i}"):
+                                    st.session_state[rewrite_result_key] = None
+
+                        # Show rewrite result
+                        if st.session_state[rewrite_result_key]:
+                            rewrite = st.session_state[rewrite_result_key]
+                            risk_reduction = rewrite.get("risk_reduction", "MEDIUM")
+                            reduction_color = (
+                                "green" if risk_reduction == "HIGH"
+                                else "orange" if risk_reduction == "MEDIUM"
+                                else "blue"
+                            )
+
+                            st.markdown(f"""
+                            <div style="border: 2px solid #28a745; border-radius: 8px; 
+                                        padding: 15px; margin: 5px 0 10px 0; 
+                                        background-color: #f0fff4;">
+                                <h4 style="color: #28a745; margin: 0 0 10px 0;">
+                                    ✅ Suggested Safer Clause
+                                </h4>
+                                <p><b>Issue:</b> {rewrite.get("original_issue", "")}</p>
+                                <hr style="border-color: #28a74544;">
+                                <p><b>Rewritten Clause:</b></p>
+                                <p style="background: white; padding: 10px; border-radius: 5px; 
+                                           border-left: 3px solid #28a745; font-style: italic;">
+                                    {rewrite.get("rewritten_clause", "")}
+                                </p>
+                                <p><b>Key Changes:</b></p>
+                                <ul>
+                                    {"".join(f"<li>{change}</li>" for change in rewrite.get("key_changes", []))}
+                                </ul>
+                                <p><b>Risk Reduction:</b> 
+                                    <span style="color: {reduction_color}; font-weight: bold;">
+                                        {risk_reduction}
+                                    </span>
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
             else:
                 st.success("✅ No significant risks found in this document.")
 
-            # ── Download Report Button ─────────────────────────────
+            # ── Download Report Button ─────────────────────────
             st.markdown("---")
             st.subheader("📄 Download Report")
 
@@ -176,6 +246,7 @@ def show_main_app():
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
     else:
         st.info("⬆️ Please upload a PDF contract to begin analysis.")
 
