@@ -25,7 +25,7 @@ class LegalAnalyzer:
             temperature=0.2,
         )
 
-        # 3. Define Prompt
+        # 3. Define Risk Analysis Prompt
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", """You are a senior legal expert specializing in contract risk analysis. 
             Your task is to analyze the provided text chunks from a contract and identify "Red Flags".
@@ -75,6 +75,12 @@ class LegalAnalyzer:
             return vectorstore
         except Exception as e:
             raise RuntimeError(f"Vector store creation failed: {str(e)}")
+
+    def get_vectorstore(self, file_path):
+        """Load PDF and return vectorstore for chat"""
+        texts = self.load_and_embed(file_path)
+        vectorstore = self.create_vector_store(texts)
+        return vectorstore
 
     def analyze_risk(self, file_path):
         """Step 3: Run RAG + LLM analysis"""
@@ -207,6 +213,43 @@ class LegalAnalyzer:
                     }
         except Exception as e:
             raise RuntimeError(f"Clause rewriting failed: {str(e)}")
+
+    def chat_with_contract(self, question, vectorstore):
+        """Answer questions about the contract using RAG"""
+        chat_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a helpful legal assistant. You have been given relevant 
+            sections from a contract. Answer the user's question based ONLY on the contract 
+            content provided. 
+            
+            Rules:
+            - Answer in plain, simple English
+            - If the answer is not in the contract, say "I couldn't find this in the contract"
+            - Be concise but complete
+            - Quote relevant parts of the contract when helpful
+            - Do not make up information
+            """),
+            ("human", """Contract sections:
+            {context}
+            
+            Question: {question}
+            
+            Please answer based on the contract content above.""")
+        ])
+
+        chat_chain = chat_prompt | self.llm
+
+        try:
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+            relevant_docs = retriever.invoke(question)
+            context = "\n\n".join([doc.page_content for doc in relevant_docs])
+
+            response = chat_chain.invoke({
+                "context": context,
+                "question": question
+            })
+            return response.content
+        except Exception as e:
+            raise RuntimeError(f"Chat failed: {str(e)}")
 
     def generate_pdf_report(self, results, risk_data, filename="contract_analysis"):
         """Generate a PDF report of the analysis"""
