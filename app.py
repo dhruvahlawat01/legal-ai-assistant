@@ -584,6 +584,9 @@ def show_how_it_works():
 
 # ── Router ─────────────────────────────────────────────
 if st.session_state.logged_in:
-    show_main_app()
+    if st.session_state.current_page == "how_it_works":
+        show_how_it_works()
+    else:
+        show_main_app()
 else:
     show_auth_screen()
