@@ -384,6 +384,204 @@ def show_main_app():
         st.session_state.chat_history = []
         st.info("⬆️ Please upload a PDF contract to begin analysis.")
 
+def show_how_it_works():
+    col1, col2 = st.columns([8, 1])
+    with col1:
+        st.title("📖 How ContractSentry Works")
+    with col2:
+        st.markdown(f"👤 **{st.session_state.username}**")
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.session_state.username = ""
+            st.rerun()
+
+    st.markdown("---")
+
+    # ── Step by Step ───────────────────────────────────────
+    st.subheader("🔄 Step-by-Step Process")
+    st.markdown("""
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 15px 0;">
+
+        <div style="flex: 1; min-width: 140px; background: #e3f2fd; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 32px;">📤</div>
+            <div style="font-weight: bold; color: #1565c0; margin: 8px 0;">Step 1</div>
+            <div style="font-weight: bold; color: #333;">Upload PDF</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">Upload your contract in PDF format</div>
+        </div>
+
+        <div style="display: flex; align-items: center; font-size: 24px; color: #90caf9;">→</div>
+
+        <div style="flex: 1; min-width: 140px; background: #f3e5f5; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 32px;">📝</div>
+            <div style="font-weight: bold; color: #6a1b9a; margin: 8px 0;">Step 2</div>
+            <div style="font-weight: bold; color: #333;">Text Extraction</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">PyPDF extracts all text from pages</div>
+        </div>
+
+        <div style="display: flex; align-items: center; font-size: 24px; color: #90caf9;">→</div>
+
+        <div style="flex: 1; min-width: 140px; background: #e8f5e9; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 32px;">✂️</div>
+            <div style="font-weight: bold; color: #2e7d32; margin: 8px 0;">Step 3</div>
+            <div style="font-weight: bold; color: #333;">Chunking</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">Split into 500-token chunks with overlap</div>
+        </div>
+
+        <div style="display: flex; align-items: center; font-size: 24px; color: #90caf9;">→</div>
+
+        <div style="flex: 1; min-width: 140px; background: #fff3e0; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 32px;">🧠</div>
+            <div style="font-weight: bold; color: #e65100; margin: 8px 0;">Step 4</div>
+            <div style="font-weight: bold; color: #333;">Embedding</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">HuggingFace BGE converts chunks to vectors</div>
+        </div>
+
+        <div style="display: flex; align-items: center; font-size: 24px; color: #90caf9;">→</div>
+
+        <div style="flex: 1; min-width: 140px; background: #fce4ec; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 32px;">🔍</div>
+            <div style="font-weight: bold; color: #880e4f; margin: 8px 0;">Step 5</div>
+            <div style="font-weight: bold; color: #333;">Retrieval</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">Top 5 relevant chunks fetched from ChromaDB</div>
+        </div>
+
+        <div style="display: flex; align-items: center; font-size: 24px; color: #90caf9;">→</div>
+
+        <div style="flex: 1; min-width: 140px; background: #e0f7fa; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 32px;">🤖</div>
+            <div style="font-weight: bold; color: #006064; margin: 8px 0;">Step 6</div>
+            <div style="font-weight: bold; color: #333;">AI Analysis</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">Groq LLaMA 3.1 analyzes for risks</div>
+        </div>
+
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Features ───────────────────────────────────────────
+    st.subheader("✨ Features")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("""
+        <div style="background: #fff8f0; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h4 style="color: #e65100; margin: 0 0 10px 0;">🚩 Risk Detection</h4>
+            <p style="color: #333; font-size: 14px;">Automatically identifies 5 high-risk clause types:</p>
+            <ul style="color: #555; font-size: 13px;">
+                <li>Non-Compete / Restricted Activity</li>
+                <li>Indefinite Term / Auto-Renewal</li>
+                <li>Broad Liability Caps</li>
+                <li>Arbitration Clauses</li>
+                <li>Data Privacy / GDPR Issues</li>
+            </ul>
+        </div>
+
+        <div style="background: #f0fff4; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h4 style="color: #276749; margin: 0 0 10px 0;">📊 Risk Score</h4>
+            <p style="color: #333; font-size: 14px;">Each contract gets an overall risk score from 0-100%:</p>
+            <ul style="color: #555; font-size: 13px;">
+                <li>🔴 HIGH RISK — Score ≥ 60%</li>
+                <li>🟠 MEDIUM RISK — Score ≥ 30%</li>
+                <li>🟢 LOW RISK — Score below 30%</li>
+            </ul>
+        </div>
+
+        <div style="background: #f3e5f5; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h4 style="color: #6a1b9a; margin: 0 0 10px 0;">✍️ Clause Rewriting</h4>
+            <p style="color: #333; font-size: 14px;">For each HIGH or MEDIUM risk clause, the AI suggests a safer, fairer alternative with:</p>
+            <ul style="color: #555; font-size: 13px;">
+                <li>Plain English explanation</li>
+                <li>Key changes made</li>
+                <li>Risk reduction level</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div style="background: #e3f2fd; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h4 style="color: #1565c0; margin: 0 0 10px 0;">💬 Chat with Contract</h4>
+            <p style="color: #333; font-size: 14px;">Ask any question about your contract in plain English:</p>
+            <ul style="color: #555; font-size: 13px;">
+                <li>What is the notice period?</li>
+                <li>Can I terminate early?</li>
+                <li>What are the payment terms?</li>
+                <li>Is there a non-compete clause?</li>
+            </ul>
+        </div>
+
+        <div style="background: #e8f5e9; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h4 style="color: #2e7d32; margin: 0 0 10px 0;">📄 PDF Report</h4>
+            <p style="color: #333; font-size: 14px;">Download a professional PDF report containing:</p>
+            <ul style="color: #555; font-size: 13px;">
+                <li>Overall risk score & breakdown</li>
+                <li>All detected risk clauses</li>
+                <li>Explanations & contract snippets</li>
+                <li>Generated timestamp & disclaimer</li>
+            </ul>
+        </div>
+
+        <div style="background: #fce4ec; border-radius: 12px; padding: 20px; margin-bottom: 15px;">
+            <h4 style="color: #880e4f; margin: 0 0 10px 0;">🔐 Secure Login</h4>
+            <p style="color: #333; font-size: 14px;">Your account is protected with:</p>
+            <ul style="color: #555; font-size: 13px;">
+                <li>SHA-256 password hashing</li>
+                <li>Supabase cloud database</li>
+                <li>Session-based authentication</li>
+                <li>Secure logout</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Tech Stack ─────────────────────────────────────────
+    st.subheader("🛠️ Tech Stack")
+
+    tech = [
+        ("🎨", "Streamlit",             "Frontend UI",          "#e3f2fd", "#1565c0"),
+        ("⚡", "Groq + LLaMA 3.1",      "AI Inference",         "#f3e5f5", "#6a1b9a"),
+        ("🧠", "HuggingFace BGE",       "Embeddings",           "#e8f5e9", "#2e7d32"),
+        ("🗄️", "ChromaDB",              "Vector Store",         "#fff3e0", "#e65100"),
+        ("🔗", "LangChain",             "RAG Pipeline",         "#fce4ec", "#880e4f"),
+        ("📄", "PyPDF + ReportLab",     "PDF Processing",       "#e0f7fa", "#006064"),
+        ("🔐", "Supabase",              "Auth & Database",      "#f9fbe7", "#558b2f"),
+        ("☁️", "Streamlit Cloud",       "Deployment",           "#e8eaf6", "#283593"),
+    ]
+
+    cols = st.columns(4)
+    for i, (icon, name, role, bg, color) in enumerate(tech):
+        with cols[i % 4]:
+            st.markdown(f"""
+            <div style="background: {bg}; border-radius: 10px; padding: 12px; 
+                        text-align: center; margin-bottom: 10px;">
+                <div style="font-size: 24px;">{icon}</div>
+                <div style="font-weight: bold; color: {color}; font-size: 13px;">{name}</div>
+                <div style="color: #555; font-size: 11px;">{role}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Disclaimer ─────────────────────────────────────────
+    st.markdown("""
+    <div style="background: #fff8e1; border: 1px solid #ffc107; border-radius: 10px; padding: 15px;">
+        <h4 style="color: #f57f17; margin: 0 0 8px 0;">⚠️ Disclaimer</h4>
+        <p style="color: #555; font-size: 13px; margin: 0;">
+            ContractSentry AI is an informational tool only. It does not constitute legal advice. 
+            Always consult a qualified lawyer before signing any contract. 
+            AI analysis may not catch all risks in complex legal documents.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🚀 Start Analyzing Contracts", use_container_width=True):
+        st.session_state.current_page = "main"
+        st.rerun()
+
 # ── Router ─────────────────────────────────────────────
 if st.session_state.logged_in:
     show_main_app()
