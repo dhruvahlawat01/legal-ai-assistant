@@ -17,6 +17,18 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
     st.session_state.username = ""
+if "vectorstore" not in st.session_state:
+    st.session_state.vectorstore = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "analysis_done" not in st.session_state:
+    st.session_state.analysis_done = False
+if "analysis_result" not in st.session_state:
+    st.session_state.analysis_result = None
+if "risk_data" not in st.session_state:
+    st.session_state.risk_data = None
+if "uploaded_filename" not in st.session_state:
+    st.session_state.uploaded_filename = ""
 
 # ── Auth Screen ────────────────────────────────────────
 def show_auth_screen():
@@ -70,7 +82,7 @@ def show_auth_screen():
 def show_main_app():
     analyzer = LegalAnalyzer()
 
-    # Top bar with username and logout
+    # Top bar
     col1, col2 = st.columns([8, 1])
     with col1:
         st.title("🛡️ ContractSentry: Legal Risk Detection")
@@ -79,6 +91,11 @@ def show_main_app():
         if st.button("Logout"):
             st.session_state.logged_in = False
             st.session_state.username = ""
+            st.session_state.vectorstore = None
+            st.session_state.chat_history = []
+            st.session_state.analysis_done = False
+            st.session_state.analysis_result = None
+            st.session_state.risk_data = None
             st.rerun()
 
     st.markdown("""
@@ -89,156 +106,268 @@ def show_main_app():
     uploaded_file = st.file_uploader("Upload PDF Contract", type=["pdf"])
 
     if uploaded_file is not None:
+
+        # Reset if new file uploaded
+        if uploaded_file.name != st.session_state.uploaded_filename:
+            st.session_state.analysis_done = False
+            st.session_state.analysis_result = None
+            st.session_state.risk_data = None
+            st.session_state.vectorstore = None
+            st.session_state.chat_history = []
+            st.session_state.uploaded_filename = uploaded_file.name
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
             uploaded_file.seek(0)
             f.write(uploaded_file.read())
             temp_path = f.name
 
         try:
-            st.info("🔄 Processing document... This may take 10-30 seconds.")
-            progress_bar = st.progress(0.0)
+            # Run analysis only once per file
+            if not st.session_state.analysis_done:
+                st.info("🔄 Processing document... This may take 10-30 seconds.")
+                progress_bar = st.progress(0.0)
 
-            result = analyzer.analyze_risk(temp_path)
-            progress_bar.progress(1.0)
+                # Build vectorstore and save to session
+                st.session_state.vectorstore = analyzer.get_vectorstore(temp_path)
+                progress_bar.progress(0.4)
 
-            # ── Risk Score ─────────────────────────────────────
-            risk_data = analyzer.calculate_risk_score(result)
+                # Run risk analysis
+                st.session_state.analysis_result = analyzer.analyze_risk(temp_path)
+                progress_bar.progress(0.8)
 
-            st.markdown("---")
-            st.subheader("📊 Overall Risk Assessment")
-
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Overall Score", f"{risk_data['score']}%")
-            with col2:
-                st.metric("🔴 High Risk", risk_data["breakdown"].get("HIGH", 0))
-            with col3:
-                st.metric("🟠 Medium Risk", risk_data["breakdown"].get("MEDIUM", 0))
-            with col4:
-                st.metric("🟢 Low Risk", risk_data["breakdown"].get("LOW", 0))
-
-            color = risk_data["color"]
-            label = risk_data["label"]
-            st.markdown(f"""
-            <div style="background-color: {color}22; border: 2px solid {color}; 
-                        border-radius: 10px; padding: 15px; text-align: center; margin: 10px 0;">
-                <h2 style="color: {color}; margin: 0;">{label}</h2>
-                <p style="margin: 5px 0;">Contract Risk Score: {risk_data['score']}%</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.progress(risk_data["score"] / 100)
-
-            # ── Detected Risks ─────────────────────────────────
-            st.markdown("---")
-            st.subheader("🚩 Detected Risks:")
-
-            if result:
-                for i, item in enumerate(result):
-                    risk_level = item.get("risk_level", "UNKNOWN")
-                    clause_type = item.get("clause_type", "General")
-                    explanation = item.get("explanation", "")
-                    text_snippet = item.get("text_snippet", "")
-
-                    color = "red" if risk_level == "HIGH" else ("orange" if risk_level == "MEDIUM" else "green")
-
-                    # Risk Card
-                    st.markdown(f"""
-                    <div style="border-left: 4px solid {color}; padding: 10px; 
-                                margin-bottom: 5px; background-color: {color}11;
-                                border-radius: 0 8px 8px 0;">
-                        <b style="color: {color};">{clause_type}</b> &nbsp; 
-                        <code style="background:{color}22;">{risk_level}</code><br><br>
-                        <i>{explanation}</i><br>
-                        {"<small><b>Snippet:</b> " + text_snippet + "</small>" if text_snippet else ""}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                    # ── Rewrite Button ─────────────────────────
-                    if risk_level in ["HIGH", "MEDIUM"]:
-                        rewrite_key = f"rewrite_{i}"
-                        rewrite_result_key = f"rewrite_result_{i}"
-
-                        if rewrite_result_key not in st.session_state:
-                            st.session_state[rewrite_result_key] = None
-
-                        col_btn1, col_btn2 = st.columns([1, 5])
-                        with col_btn1:
-                            if st.button(
-                                "✍️ Rewrite Clause",
-                                key=rewrite_key,
-                                help="Get a safer, fairer version of this clause"
-                            ):
-                                with st.spinner("✍️ Generating safer clause..."):
-                                    try:
-                                        rewrite = analyzer.rewrite_clause(
-                                            clause_type, explanation, text_snippet
-                                        )
-                                        st.session_state[rewrite_result_key] = rewrite
-                                    except Exception as e:
-                                        st.error(f"Rewrite failed: {e}")
-
-                        with col_btn2:
-                            if st.session_state[rewrite_result_key]:
-                                if st.button("❌ Hide", key=f"hide_{i}"):
-                                    st.session_state[rewrite_result_key] = None
-
-                        # Show rewrite result
-                        if st.session_state[rewrite_result_key]:
-                            rewrite = st.session_state[rewrite_result_key]
-                            risk_reduction = rewrite.get("risk_reduction", "MEDIUM")
-                            reduction_color = (
-                                "green" if risk_reduction == "HIGH"
-                                else "orange" if risk_reduction == "MEDIUM"
-                                else "blue"
-                            )
-
-                            st.markdown(f"""
-                            <div style="border: 2px solid #28a745; border-radius: 8px; 
-                                        padding: 15px; margin: 5px 0 10px 0; 
-                                        background-color: #f0fff4;">
-                                <h4 style="color: #28a745; margin: 0 0 10px 0;">
-                                    ✅ Suggested Safer Clause
-                                </h4>
-                                <p><b>Issue:</b> {rewrite.get("original_issue", "")}</p>
-                                <hr style="border-color: #28a74544;">
-                                <p><b>Rewritten Clause:</b></p>
-                                <p style="background: white; padding: 10px; border-radius: 5px; 
-                                           border-left: 3px solid #28a745; font-style: italic;">
-                                    {rewrite.get("rewritten_clause", "")}
-                                </p>
-                                <p><b>Key Changes:</b></p>
-                                <ul>
-                                    {"".join(f"<li>{change}</li>" for change in rewrite.get("key_changes", []))}
-                                </ul>
-                                <p><b>Risk Reduction:</b> 
-                                    <span style="color: {reduction_color}; font-weight: bold;">
-                                        {risk_reduction}
-                                    </span>
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-
-                    st.markdown("<br>", unsafe_allow_html=True)
-
-            else:
-                st.success("✅ No significant risks found in this document.")
-
-            # ── Download Report Button ─────────────────────────
-            st.markdown("---")
-            st.subheader("📄 Download Report")
-
-            try:
-                pdf_buffer = analyzer.generate_pdf_report(result, risk_data)
-                st.download_button(
-                    label="📥 Download PDF Report",
-                    data=pdf_buffer,
-                    file_name=f"contract_analysis_{uploaded_file.name.replace('.pdf', '')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
+                # Calculate risk score
+                st.session_state.risk_data = analyzer.calculate_risk_score(
+                    st.session_state.analysis_result
                 )
-            except Exception as e:
-                st.error(f"Could not generate report: {e}")
+                progress_bar.progress(1.0)
+                st.session_state.analysis_done = True
+                st.rerun()
+
+            result = st.session_state.analysis_result
+            risk_data = st.session_state.risk_data
+
+            # ── Tabs ───────────────────────────────────────────
+            tab1, tab2 = st.tabs(["📊 Risk Analysis", "💬 Chat with Contract"])
+
+            # ── Tab 1: Risk Analysis ───────────────────────────
+            with tab1:
+                st.subheader("📊 Overall Risk Assessment")
+
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Overall Score", f"{risk_data['score']}%")
+                with col2:
+                    st.metric("🔴 High Risk", risk_data["breakdown"].get("HIGH", 0))
+                with col3:
+                    st.metric("🟠 Medium Risk", risk_data["breakdown"].get("MEDIUM", 0))
+                with col4:
+                    st.metric("🟢 Low Risk", risk_data["breakdown"].get("LOW", 0))
+
+                color = risk_data["color"]
+                label = risk_data["label"]
+                st.markdown(f"""
+                <div style="background-color: {color}22; border: 2px solid {color}; 
+                            border-radius: 10px; padding: 15px; text-align: center; margin: 10px 0;">
+                    <h2 style="color: {color}; margin: 0;">{label}</h2>
+                    <p style="color: #333333; margin: 5px 0;">Contract Risk Score: {risk_data['score']}%</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.progress(risk_data["score"] / 100)
+
+                st.markdown("---")
+                st.subheader("🚩 Detected Risks:")
+
+                if result:
+                    for i, item in enumerate(result):
+                        risk_level = item.get("risk_level", "UNKNOWN")
+                        clause_type = item.get("clause_type", "General")
+                        explanation = item.get("explanation", "")
+                        text_snippet = item.get("text_snippet", "")
+
+                        color = "red" if risk_level == "HIGH" else ("orange" if risk_level == "MEDIUM" else "green")
+
+                        st.markdown(f"""
+                        <div style="border-left: 4px solid {color}; padding: 10px; 
+                                    margin-bottom: 5px; background-color: {color}11;
+                                    border-radius: 0 8px 8px 0;">
+                            <b style="color: {color};">{clause_type}</b> &nbsp; 
+                            <code style="background:{color}22; color: #333333;">{risk_level}</code><br><br>
+                            <span style="color: #333333;"><i>{explanation}</i></span><br>
+                            {"<small style='color:#555555;'><b>Snippet:</b> " + text_snippet + "</small>" if text_snippet else ""}
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        # Rewrite Button
+                        if risk_level in ["HIGH", "MEDIUM"]:
+                            rewrite_key = f"rewrite_{i}"
+                            rewrite_result_key = f"rewrite_result_{i}"
+
+                            if rewrite_result_key not in st.session_state:
+                                st.session_state[rewrite_result_key] = None
+
+                            col_btn1, col_btn2 = st.columns([1, 5])
+                            with col_btn1:
+                                if st.button("✍️ Rewrite Clause", key=rewrite_key):
+                                    with st.spinner("Generating safer clause..."):
+                                        try:
+                                            rewrite = analyzer.rewrite_clause(
+                                                clause_type, explanation, text_snippet
+                                            )
+                                            st.session_state[rewrite_result_key] = rewrite
+                                        except Exception as e:
+                                            st.error(f"Rewrite failed: {e}")
+                            with col_btn2:
+                                if st.session_state[rewrite_result_key]:
+                                    if st.button("❌ Hide", key=f"hide_{i}"):
+                                        st.session_state[rewrite_result_key] = None
+
+                            if st.session_state[rewrite_result_key]:
+                                rewrite = st.session_state[rewrite_result_key]
+                                risk_reduction = rewrite.get("risk_reduction", "MEDIUM")
+                                reduction_color = (
+                                    "green" if risk_reduction == "HIGH"
+                                    else "orange" if risk_reduction == "MEDIUM"
+                                    else "blue"
+                                )
+                                st.markdown(f"""
+                                <div style="border: 2px solid #28a745; border-radius: 8px; 
+                                            padding: 15px; margin: 5px 0 10px 0; 
+                                            background-color: #f0fff4;">
+                                    <h4 style="color: #28a745; margin: 0 0 10px 0;">✅ Suggested Safer Clause</h4>
+                                    <p style="color: #333333;"><b>Issue:</b> {rewrite.get("original_issue", "")}</p>
+                                    <hr style="border-color: #28a74544;">
+                                    <p style="color: #333333;"><b>Rewritten Clause:</b></p>
+                                    <p style="background: white; padding: 10px; border-radius: 5px; 
+                                               border-left: 3px solid #28a745; font-style: italic; color: #222222;">
+                                        {rewrite.get("rewritten_clause", "")}
+                                    </p>
+                                    <p style="color: #333333;"><b>Key Changes:</b></p>
+                                    <ul style="color: #333333;">
+                                        {"".join(f'<li style="color: #333333;">{change}</li>' for change in rewrite.get("key_changes", []))}
+                                    </ul>
+                                    <p style="color: #333333;"><b>Risk Reduction:</b> 
+                                        <span style="color: {reduction_color}; font-weight: bold;">{risk_reduction}</span>
+                                    </p>
+                                </div>
+                                """, unsafe_allow_html=True)
+
+                        st.markdown("<br>", unsafe_allow_html=True)
+                else:
+                    st.success("✅ No significant risks found in this document.")
+
+                # Download Report
+                st.markdown("---")
+                st.subheader("📄 Download Report")
+                try:
+                    pdf_buffer = analyzer.generate_pdf_report(result, risk_data)
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=pdf_buffer,
+                        file_name=f"contract_analysis_{uploaded_file.name.replace('.pdf', '')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"Could not generate report: {e}")
+
+            # ── Tab 2: Chat with Contract ──────────────────────
+            with tab2:
+                st.subheader("💬 Chat with Your Contract")
+                st.markdown("Ask any question about the contract and get an instant answer.")
+
+                # Suggested questions
+                st.markdown("**💡 Suggested Questions:**")
+                suggested = [
+                    "What is the notice period?",
+                    "Is there a non-compete clause?",
+                    "What are the payment terms?",
+                    "Can I terminate this contract early?",
+                    "What data is being collected?"
+                ]
+                cols = st.columns(len(suggested))
+                for idx, question in enumerate(suggested):
+                    with cols[idx]:
+                        if st.button(question, key=f"suggest_{idx}", use_container_width=True):
+                            st.session_state.chat_history.append({
+                                "role": "user",
+                                "content": question
+                            })
+                            with st.spinner("Thinking..."):
+                                try:
+                                    answer = analyzer.chat_with_contract(
+                                        question,
+                                        st.session_state.vectorstore
+                                    )
+                                    st.session_state.chat_history.append({
+                                        "role": "assistant",
+                                        "content": answer
+                                    })
+                                except Exception as e:
+                                    st.error(f"Chat failed: {e}")
+                            st.rerun()
+
+                st.markdown("---")
+
+                # Chat history display
+                for message in st.session_state.chat_history:
+                    if message["role"] == "user":
+                        st.markdown(f"""
+                        <div style="background-color: #e3f2fd; border-radius: 10px; 
+                                    padding: 10px 15px; margin: 5px 0; 
+                                    border-left: 4px solid #1976d2;">
+                            <b style="color: #1976d2;">👤 You:</b><br>
+                            <span style="color: #333333;">{message["content"]}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div style="background-color: #f3e5f5; border-radius: 10px; 
+                                    padding: 10px 15px; margin: 5px 0;
+                                    border-left: 4px solid #7b1fa2;">
+                            <b style="color: #7b1fa2;">🤖 ContractSentry:</b><br>
+                            <span style="color: #333333;">{message["content"]}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Chat input
+                col_input, col_send = st.columns([5, 1])
+                with col_input:
+                    user_question = st.text_input(
+                        "Ask a question about your contract...",
+                        key="chat_input",
+                        label_visibility="collapsed",
+                        placeholder="e.g. What happens if I break this contract?"
+                    )
+                with col_send:
+                    send_clicked = st.button("Send 📨", use_container_width=True)
+
+                if send_clicked and user_question.strip():
+                    st.session_state.chat_history.append({
+                        "role": "user",
+                        "content": user_question
+                    })
+                    with st.spinner("Thinking..."):
+                        try:
+                            answer = analyzer.chat_with_contract(
+                                user_question,
+                                st.session_state.vectorstore
+                            )
+                            st.session_state.chat_history.append({
+                                "role": "assistant",
+                                "content": answer
+                            })
+                        except Exception as e:
+                            st.error(f"Chat failed: {e}")
+                    st.rerun()
+
+                # Clear chat button
+                if st.session_state.chat_history:
+                    if st.button("🗑️ Clear Chat", use_container_width=True):
+                        st.session_state.chat_history = []
+                        st.rerun()
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
@@ -248,6 +377,11 @@ def show_main_app():
                 os.remove(temp_path)
 
     else:
+        st.session_state.analysis_done = False
+        st.session_state.analysis_result = None
+        st.session_state.risk_data = None
+        st.session_state.vectorstore = None
+        st.session_state.chat_history = []
         st.info("⬆️ Please upload a PDF contract to begin analysis.")
 
 # ── Router ─────────────────────────────────────────────
