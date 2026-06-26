@@ -359,6 +359,66 @@ class LegalAnalyzer:
         buffer.seek(0)
         return buffer
 
+    def rewrite_clause(self, clause_type, explanation, text_snippet):
+    """Suggest a safer rewrite for a risky clause"""
+    rewrite_prompt = ChatPromptTemplate.from_messages([
+        ("system", """You are a senior legal expert specializing in contract drafting.
+        Your task is to rewrite risky contract clauses into fair, balanced alternatives.
+        
+        Guidelines for rewriting:
+        - Make the clause fair for both parties
+        - Use clear, plain English
+        - Remove or limit overly broad restrictions
+        - Add reasonable time limits where missing
+        - Add geographical limits where missing
+        - Ensure GDPR compliance where relevant
+        - Keep it professional and legally sound
+        
+        Return ONLY valid JSON in this exact format, no extra commentary:
+        {{
+            "original_issue": "string - what makes the original clause risky",
+            "rewritten_clause": "string - the full rewritten clause text",
+            "key_changes": ["change 1", "change 2", "change 3"],
+            "risk_reduction": "HIGH/MEDIUM/LOW - how much risk this rewrite reduces"
+        }}
+        """),
+        ("human", """Please rewrite this risky contract clause:
+        
+        Clause Type: {clause_type}
+        Risk Explanation: {explanation}
+        Original Text: {text_snippet}
+        
+        Provide a safer, fairer alternative.""")
+    ])
+    
+    rewrite_chain = rewrite_prompt | self.llm
+    
+    try:
+        response = rewrite_chain.invoke({
+            "clause_type": clause_type,
+            "explanation": explanation,
+            "text_snippet": text_snippet if text_snippet else "No specific text provided"
+        })
+        
+        try:
+            result = json.loads(response.content)
+            return result
+        except json.JSONDecodeError:
+            try:
+                start = response.content.index("{")
+                end = response.content.rindex("}") + 1
+                result = json.loads(response.content[start:end])
+                return result
+            except (ValueError, json.JSONDecodeError):
+                return {
+                    "original_issue": explanation,
+                    "rewritten_clause": response.content,
+                    "key_changes": ["See rewritten clause above"],
+                    "risk_reduction": "MEDIUM"
+                }
+    except Exception as e:
+        raise RuntimeError(f"Clause rewriting failed: {str(e)}")
+
     def process_file(self, uploaded_file):
         """Accepts a Streamlit UploadedFile, saves to temp file, runs analysis"""
         if uploaded_file is None:
