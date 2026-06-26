@@ -11,7 +11,7 @@ if "current_page" not in st.session_state:
 # ── Load Secrets First ─────────────────────────────────
 os.environ["SUPABASE_URL"] = st.secrets["SUPABASE_URL"]
 os.environ["SUPABASE_KEY"] = st.secrets["SUPABASE_KEY"]
-os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
 # ── Page Config ────────────────────────────────────────
 st.set_page_config(page_title="ContractSentry AI", layout="wide")
@@ -455,7 +455,7 @@ def show_how_it_works():
             <div style="font-size: 32px;">🤖</div>
             <div style="font-weight: bold; color: #006064; margin: 8px 0;">Step 6</div>
             <div style="font-weight: bold; color: #333;">AI Analysis</div>
-            <div style="font-size: 12px; color: #555; margin-top: 5px;">Groq LLaMA 3.1 analyzes for risks</div>
+            <div style="font-size: 12px; color: #555; margin-top: 5px;">Gemini Flash analyzes for risks</div>
         </div>
 
     </div>
@@ -546,7 +546,7 @@ def show_how_it_works():
 
     tech = [
         ("🎨", "Streamlit",             "Frontend UI",          "#e3f2fd", "#1565c0"),
-        ("⚡", "Groq + LLaMA 3.1",      "AI Inference",         "#f3e5f5", "#6a1b9a"),
+        ("⚡", "Gemini Flash",            "AI Inference",         "#f3e5f5", "#6a1b9a"),
         ("🧠", "HuggingFace BGE",       "Embeddings",           "#e8f5e9", "#2e7d32"),
         ("🗄️", "ChromaDB",              "Vector Store",         "#fff3e0", "#e65100"),
         ("🔗", "LangChain",             "RAG Pipeline",         "#fce4ec", "#880e4f"),
