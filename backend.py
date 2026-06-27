@@ -459,6 +459,102 @@ class LegalAnalyzer:
         buffer.seek(0)
         return buffer
 
+    def extract_obligations(self, file_path):
+        """Extract all obligations, milestones, and deadlines from the contract"""
+        try:
+            texts = self.load_and_embed(file_path)
+            vectorstore = self.create_vector_store(texts)
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
+            context = "\n\n".join([doc.page_content for doc in retriever.invoke("obligations milestones deadlines deliverables timeline payment schedule")])
+        except Exception as e:
+            raise RuntimeError(f"Failed to extract obligations: {str(e)}")
+
+        obligations_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a senior legal expert. Extract all contractual obligations, milestones, deadlines, and dependencies from the contract text.
+
+            Return ONLY valid JSON in this exact format, no extra commentary:
+            [
+                {{
+                    "obligation": "string - what must be done",
+                    "deadline": "string - timeframe or deadline (e.g. '5 business days', 'within 30 days of signing')",
+                    "party_responsible": "string - who is responsible",
+                    "dependency": "string or null - what this depends on",
+                    "clause_reference": "string - clause number or section if mentioned"
+                }}
+            ]
+            
+            If no clear obligations are found, return an empty array [].
+            """),
+            ("human", "{context}")
+        ])
+
+        chain = obligations_prompt | self.llm
+        try:
+            response = chain.invoke({"context": context})
+            try:
+                result = json.loads(response.content)
+                return result
+            except json.JSONDecodeError:
+                start = response.content.index("[")
+                end = response.content.rindex("]") + 1
+                return json.loads(response.content[start:end])
+        except Exception as e:
+            raise RuntimeError(f"LLM API call failed: {str(e)}")
+
+    def predict_breach(self, obligations, team_capacity):
+        """Run breach prediction based on obligations and user's operational capacity"""
+        if not obligations:
+            return []
+
+        breach_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert in contract compliance and operational risk management.
+            
+            You will be given:
+            1. A list of contractual obligations extracted from a contract
+            2. The user's team operational capacity details
+            
+            Your job is to predict which obligations are at risk of breach based on the capacity constraints.
+            
+            Return ONLY valid JSON in this exact format, no extra commentary:
+            [
+                {{
+                    "obligation": "string - the obligation at risk",
+                    "deadline": "string - the deadline",
+                    "breach_probability": "HIGH/MEDIUM/LOW",
+                    "reason": "string - why this is at risk given the team capacity",
+                    "alert_message": "string - a specific predictive alert message like 'Predictive Alert: Clause X requires...'",
+                    "recommendation": "string - what the user should do to avoid breach"
+                }}
+            ]
+            
+            Only include obligations that have a MEDIUM or HIGH breach probability. 
+            If all obligations seem manageable, return an empty array [].
+            """),
+            ("human", """Contractual Obligations:
+            {obligations}
+            
+            Team Operational Capacity:
+            {capacity}
+            
+            Analyze each obligation against the capacity and predict breach risks.""")
+        ])
+
+        chain = breach_prompt | self.llm
+        try:
+            response = chain.invoke({
+                "obligations": json.dumps(obligations, indent=2),
+                "capacity": team_capacity
+            })
+            try:
+                result = json.loads(response.content)
+                return result
+            except json.JSONDecodeError:
+                start = response.content.index("[")
+                end = response.content.rindex("]") + 1
+                return json.loads(response.content[start:end])
+        except Exception as e:
+            raise RuntimeError(f"LLM API call failed: {str(e)}")
+
     def process_file(self, uploaded_file):
         """Accepts a Streamlit UploadedFile, saves to temp file, runs analysis"""
         if uploaded_file is None:
