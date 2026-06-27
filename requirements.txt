@@ -4,7 +4,7 @@ langchain-huggingface
 chromadb
 pdfplumber
 python-dotenv
-langchain-google-genai
+langchain-groq
 langchain-chroma
 protobuf==3.20.3
 sentence-transformers
