@@ -33,6 +33,10 @@ if "risk_data" not in st.session_state:
     st.session_state.risk_data = None
 if "uploaded_filename" not in st.session_state:
     st.session_state.uploaded_filename = ""
+if "breach_obligations" not in st.session_state:
+    st.session_state.breach_obligations = None
+if "breach_predictions" not in st.session_state:
+    st.session_state.breach_predictions = None
 
 # ── Auth Screen ────────────────────────────────────────
 def show_auth_screen():
@@ -119,6 +123,8 @@ def show_main_app():
             st.session_state.vectorstore = None
             st.session_state.chat_history = []
             st.session_state.uploaded_filename = uploaded_file.name
+            st.session_state.breach_obligations = None
+            st.session_state.breach_predictions = None
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as f:
             uploaded_file.seek(0)
@@ -151,7 +157,7 @@ def show_main_app():
             risk_data = st.session_state.risk_data
 
             # ── Tabs ───────────────────────────────────────────
-            tab1, tab2 = st.tabs(["📊 Risk Analysis", "💬 Chat with Contract"])
+            tab1, tab2, tab3 = st.tabs(["📊 Risk Analysis", "💬 Chat with Contract", "⚠️ Breach Predictor"])
 
             # ── Tab 1: Risk Analysis ───────────────────────────
             with tab1:
@@ -371,6 +377,153 @@ def show_main_app():
                 if st.session_state.chat_history:
                     if st.button("🗑️ Clear Chat", use_container_width=True):
                         st.session_state.chat_history = []
+                        st.rerun()
+
+            # ── Tab 3: Breach Predictor ────────────────────────
+            with tab3:
+                st.subheader("⚠️ Operational Bottleneck & Breach Predictor")
+                st.markdown("Tell us about your team's capacity and we'll predict which contract obligations are at risk of breach.")
+
+                st.markdown("### 📋 Step 1: Your Team's Operational Capacity")
+
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    avg_delivery = st.text_input(
+                        "⏱️ Average task/delivery time",
+                        placeholder="e.g. 7 business days",
+                        key="avg_delivery"
+                    )
+                    team_size = st.text_input(
+                        "👥 Team size",
+                        placeholder="e.g. 3 developers, 1 project manager",
+                        key="team_size"
+                    )
+                with col_b:
+                    current_workload = st.selectbox(
+                        "📦 Current workload level",
+                        ["Low (plenty of capacity)", "Medium (some projects running)", "High (near full capacity)", "Overloaded"],
+                        key="workload"
+                    )
+                    revision_time = st.text_input(
+                        "🔄 Time to process revision requests",
+                        placeholder="e.g. 3-5 days per revision round",
+                        key="revision_time"
+                    )
+
+                additional_notes = st.text_area(
+                    "📝 Any other operational constraints?",
+                    placeholder="e.g. Team goes on leave in August, dependent on a third-party API that has slow response times...",
+                    key="op_notes",
+                    height=80
+                )
+
+                if "breach_obligations" not in st.session_state:
+                    st.session_state.breach_obligations = None
+                if "breach_predictions" not in st.session_state:
+                    st.session_state.breach_predictions = None
+
+                st.markdown("### 🔍 Step 2: Extract Obligations & Predict Breaches")
+
+                if st.button("🚀 Run Breach Prediction Analysis", use_container_width=True, type="primary"):
+                    if not avg_delivery and not team_size:
+                        st.warning("Please fill in at least your average delivery time and team size.")
+                    else:
+                        capacity_summary = f"""
+                        - Average delivery time: {avg_delivery or 'Not specified'}
+                        - Team size/composition: {team_size or 'Not specified'}
+                        - Current workload: {current_workload}
+                        - Revision request turnaround: {revision_time or 'Not specified'}
+                        - Additional constraints: {additional_notes or 'None'}
+                        """
+
+                        with st.spinner("📄 Extracting obligations from contract..."):
+                            try:
+                                st.session_state.breach_obligations = analyzer.extract_obligations(temp_path)
+                            except Exception as e:
+                                st.error(f"Failed to extract obligations: {e}")
+                                st.session_state.breach_obligations = []
+
+                        if st.session_state.breach_obligations:
+                            with st.spinner("🧠 Running breach prediction analysis..."):
+                                try:
+                                    st.session_state.breach_predictions = analyzer.predict_breach(
+                                        st.session_state.breach_obligations,
+                                        capacity_summary
+                                    )
+                                except Exception as e:
+                                    st.error(f"Breach prediction failed: {e}")
+                                    st.session_state.breach_predictions = []
+                        st.rerun()
+
+                # Show extracted obligations
+                if st.session_state.breach_obligations is not None:
+                    st.markdown("---")
+                    st.markdown("### 📅 Extracted Contract Obligations")
+
+                    if not st.session_state.breach_obligations:
+                        st.info("No specific obligations or deadlines were found in this contract.")
+                    else:
+                        for i, ob in enumerate(st.session_state.breach_obligations, 1):
+                            with st.expander(f"📌 Obligation {i}: {ob.get('obligation', 'Unknown')[:80]}..."):
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.markdown(f"**⏰ Deadline:** {ob.get('deadline', 'Not specified')}")
+                                    st.markdown(f"**👤 Responsible:** {ob.get('party_responsible', 'Not specified')}")
+                                with col2:
+                                    st.markdown(f"**🔗 Dependency:** {ob.get('dependency') or 'None'}")
+                                    st.markdown(f"**📄 Clause:** {ob.get('clause_reference', 'Not specified')}")
+
+                # Show breach predictions
+                if st.session_state.breach_predictions is not None:
+                    st.markdown("---")
+                    st.markdown("### 🚨 Breach Risk Predictions")
+
+                    if not st.session_state.breach_predictions:
+                        st.success("✅ Great news! Based on your operational capacity, no high-risk breaches were predicted. Your team appears capable of meeting all contract obligations.")
+                    else:
+                        high_risks = [p for p in st.session_state.breach_predictions if p.get("breach_probability") == "HIGH"]
+                        medium_risks = [p for p in st.session_state.breach_predictions if p.get("breach_probability") == "MEDIUM"]
+
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("🔴 High Breach Risk", len(high_risks))
+                        with col2:
+                            st.metric("🟠 Medium Breach Risk", len(medium_risks))
+
+                        for pred in st.session_state.breach_predictions:
+                            prob = pred.get("breach_probability", "MEDIUM")
+                            bg = "#fff5f5" if prob == "HIGH" else "#fff8f0"
+                            border = "#dc3545" if prob == "HIGH" else "#fd7e14"
+                            emoji = "🔴" if prob == "HIGH" else "🟠"
+
+                            st.markdown(f"""
+                            <div style="background: {bg}; border-left: 5px solid {border}; 
+                                        border-radius: 8px; padding: 15px; margin: 10px 0;">
+                                <div style="font-size: 16px; font-weight: bold; color: {border}; margin-bottom: 8px;">
+                                    {emoji} {prob} BREACH RISK
+                                </div>
+                                <div style="font-size: 13px; color: #333; margin-bottom: 6px;">
+                                    <b>Obligation:</b> {pred.get('obligation', '')}
+                                </div>
+                                <div style="font-size: 13px; color: #333; margin-bottom: 6px;">
+                                    <b>Deadline:</b> {pred.get('deadline', 'Not specified')}
+                                </div>
+                                <div style="background: #fff; border-radius: 6px; padding: 10px; margin: 8px 0; 
+                                            border: 1px solid {border}; font-size: 13px; color: #555; font-style: italic;">
+                                    🔔 {pred.get('alert_message', '')}
+                                </div>
+                                <div style="font-size: 13px; color: #555; margin-bottom: 4px;">
+                                    <b>Why at risk:</b> {pred.get('reason', '')}
+                                </div>
+                                <div style="font-size: 13px; color: #2e7d32; margin-top: 8px;">
+                                    <b>💡 Recommendation:</b> {pred.get('recommendation', '')}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                    if st.button("🔄 Reset Breach Analysis", key="reset_breach"):
+                        st.session_state.breach_obligations = None
+                        st.session_state.breach_predictions = None
                         st.rerun()
 
         except Exception as e:
