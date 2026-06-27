@@ -91,8 +91,8 @@ class LegalAnalyzer:
 
         try:
             vectorstore = self.create_vector_store(texts)
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-            context = "\n\n".join([doc.page_content for doc in retriever.invoke("Risk Analysis")])
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+            context = "\n\n".join([doc.page_content[:400] for doc in retriever.invoke("Risk Analysis")])
         except Exception as e:
             raise RuntimeError(f"Vector store failed: {str(e)}")
 
@@ -464,8 +464,9 @@ class LegalAnalyzer:
         try:
             texts = self.load_and_embed(file_path)
             vectorstore = self.create_vector_store(texts)
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
-            context = "\n\n".join([doc.page_content for doc in retriever.invoke("obligations milestones deadlines deliverables timeline payment schedule")])
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+            docs = retriever.invoke("obligations milestones deadlines deliverables timeline payment schedule")
+            context = "\n\n".join([doc.page_content[:400] for doc in docs])
         except Exception as e:
             raise RuntimeError(f"Failed to extract obligations: {str(e)}")
 
@@ -541,8 +542,9 @@ class LegalAnalyzer:
 
         chain = breach_prompt | self.llm
         try:
+            obligations_truncated = obligations[:5]  # max 5 obligations to stay within token limits
             response = chain.invoke({
-                "obligations": json.dumps(obligations, indent=2),
+                "obligations": json.dumps(obligations_truncated, indent=2),
                 "capacity": team_capacity
             })
             try:
